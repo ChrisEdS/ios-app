@@ -12,6 +12,8 @@ import EarlGrey
 @testable import ownCloud
 
 class OwnCloudTests: XCTestCase {
+    
+    let demoServer: String = "demo.owncloud.org"
 
     override func setUp() {
         super.setUp()
@@ -30,8 +32,23 @@ class OwnCloudTests: XCTestCase {
         EarlGrey.select(elementWithMatcher: grey_accessibilityID("addServer")).assert(with: grey_enabled())
     }
 
-    func testClickOnTheButtonAndNothingHappens() {
+    /*
+     * Passed if: Credentials: username, password, server name, and certificate are displayed if connection works to basic auth server
+     */
+    
+    func testCorrectURLShowFields() {
+        
         EarlGrey.select(elementWithMatcher: grey_accessibilityID("addServer")).perform(grey_tap())
+        EarlGrey.select(elementWithMatcher: grey_accessibilityID("server-url-textfield")).perform(grey_replaceText(demoServer))
+        EarlGrey.select(elementWithMatcher: grey_accessibilityID("continue-button-row")).perform(grey_tap())
+        
+        //Asserts
+    
+        EarlGrey.select(elementWithMatcher: grey_accessibilityID("server-name-textfield")).assert(grey_sufficientlyVisible())
+        EarlGrey.select(elementWithMatcher: grey_accessibilityID("passphrase-username-textfield-row")).assert(grey_sufficientlyVisible())
+        EarlGrey.select(elementWithMatcher: grey_accessibilityID("passphrase-password-textfield-row")).assert(grey_sufficientlyVisible())
+        EarlGrey.select(elementWithMatcher: grey_accessibilityID("certificate-details-button")).assert(grey_sufficientlyVisible())
+        
     }
 
     func testPerformanceExample() {
