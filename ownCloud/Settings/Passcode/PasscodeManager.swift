@@ -18,6 +18,7 @@
 
 import UIKit
 import ownCloudSDK
+import LocalAuthentication
 
 class PasscodeManager: NSObject {
 
@@ -32,6 +33,14 @@ class PasscodeManager: NSObject {
         case addPasscodeFirstStepAfterErrorOnSecond
     }
 
+    // MARK: - Biometrical status
+    enum BiometricalStatus {
+        case notShown
+        case shown
+        case success
+        case error
+    }
+
     // MARK: Global vars
 
     // Common
@@ -41,6 +50,7 @@ class PasscodeManager: NSObject {
     private let passcodeKeychainPath = "passcode-keychain-path"
     private var passcodeMode: PasscodeInterfaceMode?
     private var passcodeViewController: PasscodeViewController?
+    private var biometricalStatus:BiometricalStatus
 
     // Add/Delete
     private var passcodeFromFirstStep: String?
@@ -119,6 +129,9 @@ class PasscodeManager: NSObject {
             self.dateAllowTryAgain = NSKeyedUnarchiver.unarchiveObject(with: data) as? Date
         }
 
+        // Biometrical
+        self.biometricalStatus = BiometricalStatus.notShown
+
         super.init()
     }
 
@@ -134,6 +147,7 @@ class PasscodeManager: NSObject {
                     self.timesPasscodeFailed = 0
                 }
 
+                self.biometricalStatus = BiometricalStatus.notShown
                 self.passcodeViewController = PasscodeViewController(hiddenOverlay:hiddenOverlay)
                 self.createLockWindow()
 
@@ -150,7 +164,10 @@ class PasscodeManager: NSObject {
                 self.updateUI()
 
             } else {
-                self.passcodeViewController?.overlayPasscodeView.show()
+                if self.biometricalStatus != BiometricalStatus.shown,
+                    self.biometricalStatus != BiometricalStatus.success {
+                    self.passcodeViewController?.overlayPasscodeView.show()
+                }
             }
         }
     }
@@ -281,6 +298,14 @@ class PasscodeManager: NSObject {
 
     // MARK: - Brute force protection
 
+    func showBiometricalIfNeeded() {
+        if self.passcodeViewController != nil,
+            self.biometricalStatus == BiometricalStatus.notShown,
+            (self.userDefaults?.bool(forKey: SecuritySettingsBiometricalKey))! {
+            self.authenticateUserWithBiometrical()
+        }
+    }
+
     private func scheduledTimerToUpdateInterfaceTime() {
 
         DispatchQueue.main.async {
@@ -372,6 +397,37 @@ class PasscodeManager: NSObject {
                 }
             default:
                 break
+            }
+        }
+    }
+
+    // MARK: - Biometrical
+
+    private func authenticateUserWithBiometrical() {
+        // Get the local authentication context.
+        let context = LAContext()
+
+        // Set the reason string that will appear on the authentication alert.
+        let reasonString = "Unlock".localized
+
+        // Declare a NSError variable.
+        var error: NSError?
+
+        // Check if the device can evaluate the policy.
+        if context.canEvaluatePolicy(LAPolicy.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            self.biometricalStatus = BiometricalStatus.shown
+            context.evaluatePolicy(LAPolicy.deviceOwnerAuthenticationWithBiometrics, localizedReason: reasonString) { (success, error) in
+                if success {
+                    self.biometricalStatus = BiometricalStatus.success
+                    DispatchQueue.main.async {
+                        self.completionHandler!()
+                    }
+                } else {
+                    self.biometricalStatus = BiometricalStatus.error
+                    if let error = error {
+                        Log.log("Biometrical login error: \(String(error.localizedDescription))")
+                    }
+                }
             }
         }
     }
